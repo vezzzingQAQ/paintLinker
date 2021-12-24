@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>paintLinker</title>
+    <script src="../support/p5.min.js"></script>
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body{
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+    </style>
+    <script>
+            var w_pixel=50;
+            var h_pixel=50;
+            var saveMode=0;//模式:0不截屏,1按照60秒保存,2按照绘画保存
+            var saveRate=1;//几秒截一次屏
+
+            var colorSet=[];
+            var w_count;
+            var h_count;
+            var img1Count=0;//储存图片序列1
+            var img2Count=0;//储存图片序列2
+            class VColor{
+                constructor(h,s,v,x,y,wd,ht){
+                    this.h=h;
+                    this.s=s;
+                    this.v=v;
+                    this.x=x;
+                    this.y=y;
+                    this.wd=wd;
+                    this.ht=ht;
+                    this.t=0;
+                    this.hspeed=2;
+                    this.vspeed=5;
+
+                    this.hasBeenTouched=false;
+                }
+                start(){
+                    if(this.v<=300){
+                        this.v+=this.vspeed;
+                    }else{
+                        this.hasBeenTouched=true;
+                    }
+                }
+                change(){
+                    this.t++;
+                    if(this.h<300){
+                        this.h+=this.hspeed;
+                    }else{
+                        this.h=0;
+                    }
+                }
+                checkIn(x,y){
+                    if(x<this.x+this.wd && x>this.x && y<this.y+this.ht && y>this.y){
+                        return true;
+                    }else{
+                        return false;
+                    }
+                }
+            }
+            function setup() {
+                createCanvas(windowWidth, windowHeight);
+                colorMode(HSB,300);
+                noStroke();
+                smooth();
+                //生成颜色数组
+                w_count=width/w_pixel;
+                h_count=height/h_pixel;
+                for(let i=0;i<h_count;i++){
+                    let tempSet=[];
+                    let y=i*h_pixel;
+                    for(let j=0;j<w_count;j++){
+                        let x=j*w_pixel;
+                        colorSet.push(new VColor(120,300,0,x,y,w_pixel,h_pixel));
+                    }
+                }
+                console.log(colorSet);
+            }
+            function windowResized() {
+                resizeCanvas(windowWidth,windowHeight);
+            }
+            function draw(){
+                background(0);
+                for(let i=0;i<colorSet.length;i++){
+                    let currentColor=colorSet[i];
+                    //遍历所有触摸点,修改颜色
+                    for(let j=0;j<touches.length;j++){
+                        let currentTouch=touches[j];
+                        if(currentColor.checkIn(currentTouch.x,currentTouch.y)){
+                            //如果是第一次,先执行v白化
+                            if(currentColor.hasBeenTouched==false){
+                                currentColor.start();
+                            }
+                            currentColor.change();
+                        }
+                    }
+                    fill(currentColor.h,currentColor.s,currentColor.v);
+                    rect(currentColor.x,currentColor.y,currentColor.wd,currentColor.ht);
+                    //在鼠标点击时也有反应
+                    if(mouseIsPressed){
+                        if(currentColor.checkIn(mouseX,mouseY)){
+                            //如果是第一次,先执行v白化
+                            if(currentColor.hasBeenTouched==false){
+                                currentColor.start();
+                            }
+                            currentColor.change();
+                        }
+                    }
+                }
+                //储存图片
+                if(saveMode==1){
+                    if(frameCount%(60*saveRate)==0){
+                        img1Count++;
+                        save("paintLinkerM"+img1Count+".png");
+                    }
+                }
+            }
+    </script>
+</head>
+<body>
+    
+</body>
+</html>
