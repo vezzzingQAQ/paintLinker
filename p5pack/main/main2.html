@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>paintLinker</title>
+    <script src="../support/p5.min.js"></script>
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-touch-callout:none;  
+            -webkit-user-select:none;  
+            -khtml-user-select:none;  
+            -moz-user-select:none;  
+            -ms-user-select:none;  
+            user-select:none;  
+        }
+        body{
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        ::selection{
+            background-color: transparent;
+        }
+    </style>
+    <script type="text/javascript">  
+        function doNothing(){  
+            window.event.returnValue=false;  
+            return false;  
+        }  
+    </script>  
+    <script>
+        var w_pixel=30;
+        var h_pixel=30;
+        var saveMode=1;//模式:0不截屏,1按照1秒保存,2按照绘画保存,3JSON
+        var saveRate=10;//几秒截一次屏
+
+        var colorSet=[];
+        var w_count;
+        var h_count;
+        var img1Count=0;//储存图片序列1
+        var img2Count=0;//储存图片序列2
+
+        var jsonCount=0;
+
+        const G=0.8;
+
+        var particleSystem;
+
+        class VColor{
+            constructor(h,s,v,x,y,wd,ht){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+                this.x=x;
+                this.y=y;
+                this.wd=wd;
+                this.ht=ht;
+                this.t=0;
+                this.hspeed=2;
+                this.vspeed=5;
+
+                this.hasBeenTouched=false;
+            }
+            start(){
+                if(this.v<=300){
+                    this.v+=this.vspeed;
+                }else{
+                    this.hasBeenTouched=true;
+                }
+            }
+            change(){
+                this.t++;
+                if(this.h<300){
+                    this.h+=this.hspeed;
+                }else{
+                    this.h=0;
+                }
+            }
+            checkIn(x,y){
+                if(x<this.x+this.wd && x>this.x && y<this.y+this.ht && y>this.y){
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+            run(){
+                if(this.hasBeenTouched==false){
+                    this.start();
+                }
+                this.change();
+            }
+            display(){
+                fill(this.h,this.s,this.v);
+                rect(this.x,this.y,this.wd,this.ht);
+            }
+        }
+        class ParticleSystem{
+            constructor(){
+                this.particleList=[];
+            }
+            addParticle(h,s,v,x,y){
+                let d_rect=random(5,10);
+                this.particleList.push(new Particle(h,s,v,x,y,d_rect,d_rect,random(-5,5),random(-20,2)));
+            }
+            run(){
+                for(var i=0;i<this.particleList.length;i++){
+                    if(this.particleList[i].isDead()){
+                        this.particleList.splice(i,1);
+                    }else{
+                        this.particleList[i].update();
+                        if(frameCount%(60*saveRate)!=0){
+                            this.particleList[i].display();
+                        }
+                    }
+                }
+            }
+        }
+        class Particle{
+            constructor(h,s,v,x,y,wd,ht,vx,vy){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.wd=wd;
+                this.ht=ht;
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+                this.acceleration=createVector(0,G);
+
+                this.totalLifeSpan=200;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifeSpan-=2;
+            }
+            display(){
+                rectMode(CENTER);
+                fill(this.h,this.s,this.v,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                rect(this.position.x,this.position.y,this.wd,this.ht);
+                rectMode(CORNER);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            colorMode(HSB,300);
+            noStroke();
+            smooth();
+            //初始化粒子系统
+            particleSystem=new ParticleSystem;
+            //生成颜色数组
+            w_count=displayWidth/w_pixel;
+            h_count=displayHeight/h_pixel;
+            for(let i=0;i<h_count;i++){
+                let tempSet=[];
+                let y=i*h_pixel;
+                for(let j=0;j<w_count;j++){
+                    let x=j*w_pixel;
+                    colorSet.push(new VColor(220,300,0,x,y,w_pixel,h_pixel));
+                }
+            }
+        }
+        function windowResized(){
+            resizeCanvas(windowWidth,windowHeight);
+        }
+        function draw(){
+            background(0);
+            for(let i=0;i<colorSet.length;i++){
+                let currentColor=colorSet[i];
+                //遍历所有触摸点,修改颜色
+                for(let j=0;j<touches.length;j++){
+                    let currentTouch=touches[j];
+                    if(currentColor.checkIn(currentTouch.x,currentTouch.y)){
+                        currentColor.run();
+                    }
+                }
+                //在鼠标点击时也有反应
+                if(mouseIsPressed){
+                    if(currentColor.checkIn(mouseX,mouseY)){
+                        //如果是第一次,先执行v白化
+                        currentColor.run();
+                        particleSystem.addParticle(currentColor.h,currentColor.s,300,mouseX,mouseY);
+                    }
+                }
+                currentColor.display();
+            }
+            //储存图片
+            if(saveMode==1){
+                if(frameCount%(60*saveRate)==0){
+                    img1Count++;
+                    save("paintLinkerM"+img1Count+".png");
+                }
+            }
+            if(saveMode==3){
+                if(frameCount%(60*saveRate)==0){
+                    jsonCount++;
+                    let json={}
+                    json.count=jsonCount;
+                    json.set=colorSet;
+                    saveJSON(json,"pljson"+jsonCount);
+                }
+            }
+            //粒子系统
+            particleSystem.run();
+        }
+        function mousePressed(){
+            fullscreen(true);
+        }
+    </script>
+</head>
+<body oncontextmenu="doNothing()">
+    
+</body>
+</html>
