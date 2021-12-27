@@ -63,6 +63,7 @@
                 this.t=0;
                 this.hspeed=2;
                 this.vspeed=5;
+                this.fadeoutSpeed=0.01;
 
                 this.hasBeenTouched=false;
             }
@@ -73,6 +74,13 @@
                     this.hasBeenTouched=true;
                 }
             }
+            fadeOut(){
+                if(this.v>0){
+                    this.v-=this.fadeoutSpeed;
+                }else{
+                    this.v=0;
+                }
+            }
             change(){
                 this.t++;
                 if(this.h<300){
@@ -80,6 +88,9 @@
                 }else{
                     this.h=0;
                 }
+            }
+            black(){
+                this.v=0;
             }
             checkIn(x,y){
                 if(x<this.x+this.wd && x>this.x && y<this.y+this.ht && y>this.y){
@@ -95,6 +106,7 @@
                 this.change();
             }
             display(){
+                this.fadeOut();
                 fill(this.h,this.s,this.v);
                 rect(this.x,this.y,this.wd,this.ht);
             }
