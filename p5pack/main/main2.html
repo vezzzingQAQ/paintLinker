@@ -63,7 +63,7 @@
                 this.t=0;
                 this.hspeed=2;
                 this.vspeed=5;
-                this.fadeoutSpeed=0.01;
+                this.fadeoutSpeed=0.005;
 
                 this.hasBeenTouched=false;
             }
@@ -79,6 +79,7 @@
                     this.v-=this.fadeoutSpeed;
                 }else{
                     this.v=0;
+                    this.hasBeenTouched=false;
                 }
             }
             change(){
