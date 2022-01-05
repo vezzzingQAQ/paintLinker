@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>paintLinker</title>
+    <script src="../support/p5.min.js"></script>
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-touch-callout:none;  
+            -webkit-user-select:none;  
+            -khtml-user-select:none;  
+            -moz-user-select:none;  
+            -ms-user-select:none;  
+            user-select:none;  
+        }
+        body{
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        ::selection{
+            background-color: transparent;
+        }
+    </style>
+    <script type="text/javascript">  
+        function doNothing(){  
+            window.event.returnValue=false;  
+            return false;  
+        }  
+    </script>  
+    <script>
+        var w_pixel=30;
+        var h_pixel=30;
+        var saveMode=1;//模式:0不截屏,1按照1秒保存,2按照绘画保存,3JSON
+        var saveRate=10;//几秒截一次屏
+
+        var colorSet=[];
+        var w_count;
+        var h_count;
+        var img1Count=0;//储存图片序列
+        var img2Count=0;//储存图片序列2
+
+        var jsonCount=0;
+
+        var particleCount=2;
+        var particleCountMin=1;
+        var particleCountMax=3;
+
+        const G=0.8;
+
+        var particleSystem;
+
+        class VColor{
+            constructor(h,s,v,x,y,wd,ht){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+                this.x=x;
+                this.y=y;
+                this.wd=wd;
+                this.ht=ht;
+                this.t=0;
+                this.hspeed=2;
+                this.vspeed=5;
+                this.fadeoutSpeed=0.005;
+
+                this.hasBeenTouched=false;
+            }
+            start(){
+                if(this.v<=300){
+                    this.v+=this.vspeed;
+                }else{
+                    this.hasBeenTouched=true;
+                }
+            }
+            fadeOut(){
+                if(this.v>200){
+                    this.hasBeenTouched=false;
+                }
+                if(this.v>0){
+                    this.v-=this.fadeoutSpeed;
+                }else{
+                    this.v=0;
+                }
+            }
+            change(){
+                this.t++;
+                if(this.h<300){
+                    this.h+=this.hspeed;
+                }else{
+                    this.h=0;
+                }
+            }
+            black(){
+                this.v=0;
+            }
+            checkIn(x,y){
+                if(x<this.x+this.wd && x>this.x && y<this.y+this.ht && y>this.y){
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+            run(){
+                if(this.hasBeenTouched==false){
+                    this.start();
+                }
+                this.change();
+            }
+            display(){
+                this.fadeOut();
+                fill(this.h,this.s,this.v);
+                rect(this.x,this.y,this.wd,this.ht);
+            }
+        }
+        class ParticleSystem{
+            constructor(){
+                this.particleList=[];
+            }
+            addParticle(h,s,v,x,y){
+                let type=int(random(0,100));
+                let startRate=10;
+                if(type<startRate){
+                    this.particleList.push(new SmallCircleParticle(h,s,v,x,y,random(5,10),random(-1,1),random(-1,1)));
+                }else if(type<startRate+1){
+                    let d_rect=random(15,30);
+                    this.particleList.push(new LargeRectParticle(h,s,v,x,y,d_rect,d_rect,random(-2,2),random(-10,1)));      
+                }else if(type<startRate+2){
+                    this.particleList.push(new ExplodeCircleParticle(h,s,v,x,y));       
+                }else if(type<startRate+3){
+                    this.particleList.push(new ExplodeRectParticle(h,s,v,x,y));                 
+                }else if(type<startRate+9){
+                    let size=random(0,20);
+                    this.particleList.push(new SmallWords(h,s,v,x,y,size,random(-5,5),random(-5,5)));
+                }else if(type<startRate+11){
+                    let size=random(0,20);
+                    this.particleList.push(new SmallEmoj(x,y,size,random(-5,5),random(-5,5)));  
+                }else if(type<startRate+12){
+                    this.particleList.push(new LargeEffect(h,s,v,x,y));                    
+                }else if(type<startRate+13){
+                    this.particleList.push(new ExplodeParticleSystem(h,s,v,x,y));                    
+                }else{
+                    let d_rect=random(5,10);
+                    this.particleList.push(new SmallRectParticle(h,s,v,x,y,d_rect,d_rect,random(-5,5),random(-20,2)));
+                }
+            }
+            run(){
+                for(var i=0;i<this.particleList.length;i++){
+                    if(this.particleList[i].isDead()){
+                        this.particleList.splice(i,1);
+                    }else{
+                        this.particleList[i].update();
+                        if(frameCount%(60*saveRate)!=0){
+                            this.particleList[i].display();
+                        }
+                    }
+                }
+            }
+        }
+        class SmallRectParticle{//小正方形粒子
+            constructor(h,s,v,x,y,wd,ht,vx,vy){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.wd=wd;
+                this.ht=ht;
+
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+                this.acceleration=createVector(0,G);
+
+                this.totalLifeSpan=200;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifeSpan-=2;
+            }
+            display(){
+                rectMode(CENTER);
+                noStroke();
+                fill(this.h,this.s,this.v,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                rect(this.position.x,this.position.y,this.wd,this.ht);
+                rectMode(CORNER);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class SmallWords{//字
+            constructor(h,s,v,x,y,size,vx,vy){
+                this.h=h;
+                this.s=0;
+                this.v=300;
+
+                this.size=size;
+
+                this.textList=[
+                    "回家咯!!",
+                    "vez",
+                    "love",
+                    "u",
+                    "2333",
+                    "前方高能",
+                    "pull up!!",
+                    "妈见打",
+                    "啊",
+                    "awsl",
+                    "giegie",
+                    "love u!!",
+                    "by",
+                    "( ´･･)ﾉ(._.`)",
+                    "(っ °Д °;)っ",
+                    "v(○´･д･)ﾉ",
+                    "(*/ω＼*)",
+                    "(｡･∀･)ﾉﾞ嗨",
+                    "(╯°□°）╯︵ ┻━┻",
+                    "(ﾉ*･ω･)ﾉ",
+                    "az",
+                    "H20",
+                    "hhhhh",
+                    "蛤",
+                    "这河里吗",
+                    "这横河狸",
+                    "*",
+                    "|",
+                    "a",
+                    "aa",
+                    "@",
+                    "crud",
+                    "dada",
+                    "x",
+                    "233",
+                    "红红火火恍恍惚惚",
+                    "妈见跪",
+                    "献上膝盖",
+                    "!",
+                    "?",
+                    "黑人问号",
+                    "12315",
+                    "3252",
+                    "16317",
+                    "1314",
+                    "好吧",
+                    "狗头保命",
+                    "大的药来了!",
+                    "蓝色药丸",
+                    "水军",
+                    "一键三连",
+                    "双击取消点赞",
+                    "红色药丸",
+                    "啊这...",
+                    "...",
+                    "._.",
+                    "o_o",
+                    "满地找头",
+                    "双击喂楼主喝水",
+                    "鼓掌.jpg",
+                    "EVA",
+                    "xp",
+                    "furry",
+                    "千",
+                    "可还行",
+                    "真理",
+                    "埂",
+                    "惊了",
+                    "好家伙",
+                    "撒日朗!!!",
+                    "谢谢卡尔!!",
+                    "资本家",
+                    "无了",
+                    "摆烂",
+                    "processing!",
+                    "PHP是最好的语言!",
+                    "没有对象._.",
+                    "麻了..",
+                    "。",
+                    "额",
+                    "OMG",
+                    "哈哈哈哈",
+                    "上头",
+                    "西",
+                    "^",
+                    ":)",
+                    "^_^",
+                    "$",
+                    "#",
+                    "geometoy",
+                    "atm",
+                    "yyds!!!",
+                    "flag",
+                    "老带新",
+                    "ACI",
+                    "未闻作品名",
+                    "1245666",
+                    "13#43#4",
+                    "对头",
+                    "lllo",
+                    "k",
+                    "okk",
+                    "ok",
+                    "哦!",
+                    "azz",
+                    "..",
+                    "??",
+                    "人啊无了",
+                    "没人吗",
+                    "人都到哪里去了",
+                    "日常",
+                    "PO",
+                    "toj",
+                    "好怪呦",
+                    "这很地狱",
+                    "你的名次",
+                    "发作",
+                    "前方核能",
+                    "过于硬核",
+                    "ETO",
+                    "消灭人类暴政,世界属于三体!",
+                    "前进四!",
+                    "左满舵",
+                    "轰20",
+                    "乐",
+                    "hhh",
+                    "俺..",
+                    "算了",
+                    "1",
+                    "3.14159265",
+                    "def setup()",
+                    "hello world",
+                    "matrix",
+                    "占位符",
+                    "【鞠躬】",
+                    "媒体",
+                    "装置",
+                    "艺术",
+                    "C井",
+                    "EMO",
+                    "都给我去谈恋爱!!",
+                    "秃了,也变强了",      
+                    "优势在我",
+                    "50万",
+                    "12339",
+                    "2887",
+                    "8848",
+                    "AIPC",
+                    "图吧老哥",
+                    "Rick Roll",
+                    "你被骗了",
+                    "本",
+                    "整个人都不好了",
+                    "好勒",
+                    "新宝岛",
+                    "KFC",
+                    "疯狂星期四",
+                    "世界统一于物质性",
+                    "金坷垃",
+                    "set4?set4!",
+                    "都江堰",
+                    "大运河",
+                    "坎儿井",
+                    "谢谢你，泰罗",
+                    "马夫蒂",
+                    "虫豸",
+                    "kkv",
+                    "railgun",
+                    "RTX ON",
+                    "RTX OFF",
+                    "绝活",
+                    "绝绝子",
+                    "orderrrr",
+                    "乌鸦坐飞机",
+                    "大象踢腿",
+                    "黑虎掏心",
+                    "厚颜无耻之人",
+                    "城站站",
+                    "哇 光头",
+                    "mikufans",
+                    "fu",
+                    "hoho",
+                    "吼吼吼",
+                    "trans am",
+                    "无了",
+                    "GUNDAM",
+                    "电脑说我们死定了",
+                    "dropping!!",
+                    "overspeed",
+                    "v1",
+                    "rotate",
+                    "function",
+                    "NERV",
+                    "人类补完计划",
+                    "叙利亚悍匪指挥中心-6号楼811",
+                    "new type",
+                    "v2",
+                    "战斗力五",
+                ]
+                this.text=this.textList[int(random(0,this.textList.length))];
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+                this.acceleration=createVector(0,-G*0.1);
+
+                this.totalLifeSpan=200;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifeSpan--;
+            }
+            display(){
+                noStroke();
+                textSize(this.size);
+                fill(this.h,this.s,this.v,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                text(this.text,this.position.x,this.position.y);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class SmallEmoj{//字
+            constructor(x,y,size,vx,vy){
+
+                this.size=size;
+
+                this.textList=[
+                    "😀",
+                    "😁",
+                    "😂",
+                    "🤣",
+                    "😃",
+                    "😄",
+                    "😅",
+                    "😆",
+                    "😉",
+                    "😊",
+                    "😋",
+                    "😎",
+                    "😍",
+                    "😘",
+                    "🥰",
+                    "😗",
+                    "😙",
+                    "😚",
+                    "🙂",
+                    "🤗",
+                    "🤩",
+                    "🤔",
+                    "🤨",
+                    "😐",
+                    "😑",
+                    "😶",
+                    "🙄",
+                    "😏",
+                    "😣",
+                    "😥",
+                    "😮",
+                    "🤐",
+                    "😯",
+                    "😪",
+                    "😫",
+                    "🥱",
+                    "😴",
+                    "😌",
+                    "😛",
+                    "😜",
+                    "😝",
+                    "🤤",
+                    "😒",
+                    "😓",
+                    "😔",
+                    "😕",
+                    "🙃",
+                    "😲",
+                    "😖",
+                    "😞",
+                    "😟",
+                    "🤯",
+                    "😩",
+                    "😨",
+                    "😭",
+                    "🥵",
+                    "😱",
+                    "😰",
+                    "😳",
+                    "😵",
+                    "🤪",
+                    "🥴",
+                    "🤒",
+                    "😡",
+                    "😇",
+                    "🤧",
+                    "🤭",
+                    "🧐",
+                    "🤓",
+                ]
+                this.text=this.textList[int(random(0,this.textList.length))];
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+
+                this.totalLifeSpan=150;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.position.add(this.velocity);
+                this.lifeSpan--;
+            }
+            display(){
+                noStroke();
+                textSize(this.size);
+                fill(300,300,300,map(this.lifeSpan,0,this.totalLifeSpan,0,255))
+                text(this.text,this.position.x,this.position.y);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class LargeRectParticle{//大正方形粒子
+            constructor(h,s,v,x,y,wd,ht,vx,vy){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.wd=wd;
+                this.ht=ht;
+
+                this.r=0;
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+                this.acceleration=createVector(0,G);
+
+                this.totalLifeSpan=200;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifeSpan--;
+                this.r+=0.3;
+            }
+            display(){
+                push();
+                    translate(this.position.x,this.position.y);
+                    rotate(this.r);
+                    rectMode(CENTER);
+                    noStroke();
+                    fill(this.h,this.s,this.v,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                    rect(0,0,this.wd,this.ht);
+                    rectMode(CORNER);
+                pop();
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class SmallCircleParticle{//小圆粒子
+            constructor(h,s,v,x,y,r,vx,vy){
+                this.h=300-h;
+                this.s=s;
+                this.v=v;
+
+                this.r=r;
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+                this.acceleration=createVector(0,G);
+
+                this.totalLifeSpan=100;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.checkBound();
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifeSpan--;
+            }
+            checkBound(){
+                if(this.position.x<0 || this.position.x>width){
+                    if(this.position.x<0){
+                        this.position.x=0;
+                    }else{
+                        this.position.x=width;
+                    }
+                    this.velocity.x*=-1;
+                }if(this.position.y<0 || this.position.y>height){
+                    if(this.position.y<0){
+                        this.position.y=0;
+                    }else{
+                        this.position.y=height
+                    }
+                    this.velocity.y*=-0.75;
+                }
+            }
+            display(){
+                noStroke();
+                fill(this.h,this.s,this.v,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                circle(this.position.x,this.position.y,this.r);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class ExplodeCircleParticle{//放射圆
+            constructor(h,s,v,x,y){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.r=0;
+                this.rAmount=random(5,20);
+
+                this.position=createVector(x,y);
+
+                this.totalLifeSpan=100;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.r+=this.rAmount;
+                this.lifeSpan--;
+            }
+            display(){
+                strokeWeight(2);
+                noFill();
+                stroke(this.h,this.s,300,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                circle(this.position.x,this.position.y,this.r);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class ExplodeRectParticle{//放射方
+            constructor(h,s,v,x,y){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.r=0;
+                
+                this.rAmount=random(15,30);
+
+                this.rotate=random(0,PI*2);
+
+                this.position=createVector(x,y);
+
+                this.totalLifeSpan=100;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.r+=this.rAmount;
+                this.lifeSpan--;
+                this.rotate+=0.05;
+            }
+            display(){
+                strokeWeight(2);
+                noFill();
+                push();
+                    translate(this.position.x,this.position.y)
+                    rotate(this.rotate);
+                    rectMode(CENTER);
+                    noFill(); 
+                    stroke(this.h,this.s,300,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                    rect(0,0,this.r,this.r);
+                    rectMode(CORNER);
+                pop();
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class LargeEffect{
+            constructor(h,s,v,x,y){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.r=0;
+                
+                this.rAmount=random(7,15);
+                this.ratationAnount=random(-0.1,0.1);
+
+                this.rotate=random(0,PI*2);
+
+                this.position=createVector(x,y);
+
+                this.totalLifeSpan=50;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.r+=this.rAmount;
+                this.lifeSpan--;
+                this.rotate+=this.ratationAnount;
+            }
+            display(){
+                strokeWeight(2);
+                noFill();
+                let len=10;
+                for(let i=0;i<len;i++){
+                    push();
+                        translate(this.position.x,this.position.y)
+                        rotate(this.rotate+i/10);
+                        rectMode(CENTER);
+                        noFill(); 
+                        stroke(map(i,0,len,this.h,360),this.s,300,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                        rect(0,0,this.r*i/5,this.r*i/5);
+                        rectMode(CORNER);
+                    pop();
+                }
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        class CircleNB{
+            constructor(h,s,v,x,y,r,vx,vy){
+                this.h=300-h;
+                this.s=s;
+                this.v=v;
+
+                this.r=r;
+
+                this.position=createVector(x,y);
+                this.velocity=createVector(vx,vy);
+
+                this.totalLifeSpan=50;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                this.position.add(this.velocity);
+                this.lifeSpan--;
+            }
+            display(){
+                noStroke();
+                fill(this.h,this.s,this.v,map(this.lifeSpan,0,this.totalLifeSpan,0,255));
+                circle(this.position.x,this.position.y,this.r);
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+
+        }
+        class ExplodeParticleSystem{
+            constructor(h,s,v,x,y){
+                this.h=h;
+                this.s=s;
+                this.v=v;
+
+                this.ps=[];
+
+                this.position=createVector(x,y);
+
+                this.totalLifeSpan=150;
+                this.lifeSpan=this.totalLifeSpan;
+            }
+            update(){
+                if(this.lifeSpan>100){
+                    for(let i=0;i<6;i++){
+                        this.ps.push(new CircleNB(this.h,this.s,this.v,this.position.x,this.position.y,3,random(-5,5),random(-5,5)));  
+                    }
+                }
+                this.lifeSpan--;
+            }
+            display(){
+                for(var i=0;i<this.ps.length;i++){
+                    if(this.ps[i].isDead()){
+                        this.ps.splice(i,1);
+                    }else{
+                        this.ps[i].update();
+                        if(frameCount%(60*saveRate)!=0){
+                            this.ps[i].display();
+                        }
+                    }
+                }
+            }
+            isDead(){
+                if(this.lifeSpan<0){
+                    return(true);
+                }else{
+                    return(false);
+                }
+            }
+        }
+        function setup() {
+            createCanvas(windowWidth,windowHeight);
+            colorMode(HSB,300);
+            noStroke();
+            smooth();
+            //初始化粒子系统
+            particleSystem=new ParticleSystem;
+            //生成颜色数组
+            w_count=displayWidth/w_pixel;
+            h_count=displayHeight/h_pixel;
+            for(let i=0;i<h_count;i++){
+                let tempSet=[];
+                let y=i*h_pixel;
+                for(let j=0;j<w_count;j++){
+                    let x=j*w_pixel;
+                    colorSet.push(new VColor(220,300,0,x,y,w_pixel,h_pixel));
+                }
+            }
+        }
+        function windowResized(){
+            resizeCanvas(windowWidth,windowHeight);
+        }
+        function draw(){
+            background(0);
+            noStroke();
+            for(let i=0;i<colorSet.length;i++){
+                let currentColor=colorSet[i];
+                //遍历所有触摸点,修改颜色
+                for(let j=0;j<touches.length;j++){
+                    let currentTouch=touches[j];
+                    if(currentColor.checkIn(currentTouch.x,currentTouch.y)){
+                        currentColor.run();
+                        for(let i=0;i<particleCount;i++){
+                            particleSystem.addParticle(currentColor.h,currentColor.s,300,currentTouch.x,currentTouch.y);
+                        }
+                    }
+                }
+                //在鼠标点击时也有反应
+                if(mouseIsPressed){
+                    if(currentColor.checkIn(mouseX,mouseY)){
+                        //如果是第一次,先执行v白化
+                        currentColor.run();
+                        for(let i=0;i<particleCount;i++){
+                            particleSystem.addParticle(currentColor.h,currentColor.s,300,mouseX,mouseY);
+                        }
+                    }
+                }
+                currentColor.display();
+            }
+            //储存图片
+            if(saveMode==1){
+                if(frameCount%(60*saveRate)==0){
+                    img1Count++;
+                    save("paintLinkerM"+img1Count+".png");
+                }
+            }
+            //粒子系统
+            particleSystem.run();
+            //定时改变粒子数量[10s]
+            if(frameCount%60==0){
+                particleCount=int(random(particleCountMin,particleCountMax));
+            }
+        }
+        function mousePressed(){
+            fullscreen(true);
+        }
+    </script>
+</head>
+<body oncontextmenu="doNothing()">
+    
+</body>
+</html>
