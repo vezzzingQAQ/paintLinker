@@ -876,13 +876,13 @@
                 }
                 currentColor.display();
             }
-            //储存图片
-            if(saveMode==1){
-                if(frameCount%(60*saveRate)==0){
-                    img1Count++;
-                    save("paintLinkerM"+img1Count+".png");
-                }
-            }
+//             //储存图片
+//             if(saveMode==1){
+//                 if(frameCount%(60*saveRate)==0){
+//                     img1Count++;
+//                     save("paintLinkerM"+img1Count+".png");
+//                 }
+//             }
             //粒子系统
             particleSystem.run();
             //定时改变粒子数量[10s]
